@@ -53,7 +53,7 @@ func newOauth2Server(expectedState string) *oauth2Server {
 
 // Start the oauth2Server asynchronously.
 func (s *oauth2Server) Start() (string, error) {
-	l, err := net.Listen("tcp", ":0") //nolint:gosec
+	l, err := net.Listen("tcp", ":33421") //nolint:gosec
 	if err != nil {
 		return "", err
 	}
