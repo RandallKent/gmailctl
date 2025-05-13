@@ -15,6 +15,7 @@ var (
 	initReset          bool
 	initRefreshExpired bool
 	initUpdateLib      bool
+	port               int
 )
 
 // initCmd represents the init command
@@ -24,7 +25,7 @@ var initCmd = &cobra.Command{
 	Long: `The init command initialize the Gmail configuration, asking
 you for details and guiding you through the process of
 setting up the API authorizations and initial settings.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(*cobra.Command, []string) {
 		var err error
 		if initReset {
 			err = resetConfig()
@@ -48,6 +49,7 @@ func init() {
 	initCmd.Flags().BoolVar(&initReset, "reset", false, "Reset the configuration.")
 	initCmd.Flags().BoolVar(&initRefreshExpired, "refresh-expired", false, "Refresh auth token if expired.")
 	initCmd.Flags().BoolVar(&initUpdateLib, "update-lib", false, "Update the library file.")
+	initCmd.Flags().IntVar(&port, "port", 0, "OAuth server bind port (default is 0 meaning random port)")
 }
 
 func resetConfig() error {
@@ -62,7 +64,7 @@ func continueConfig() error {
 	if err := handleCfgDir(); err != nil {
 		return fmt.Errorf("configuring the main config directory: %w", err)
 	}
-	if err := APIProvider.InitConfig(cfgDir); err != nil {
+	if err := APIProvider.InitConfig(cfgDir, port); err != nil {
 		return err
 	}
 	fmt.Println("\nYou have correctly configured gmailctl to use Gmail APIs.")
@@ -71,7 +73,7 @@ func continueConfig() error {
 
 func refreshToken() error {
 	if rt, ok := APIProvider.(TokenRefresher); ok {
-		return rt.RefreshToken(context.Background(), cfgDir)
+		return rt.RefreshToken(context.Background(), cfgDir, port)
 	}
 	return nil
 }

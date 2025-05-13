@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	"github.com/mbrt/gmailctl/internal/engine/gmail"
@@ -22,6 +23,21 @@ func (fs Filters) String() string {
 		}
 		first = false
 		w.WriteString(f.String())
+	}
+
+	return w.String()
+}
+
+func (fs Filters) DebugString() string {
+	w := writer{}
+
+	first := true
+	for _, f := range fs {
+		if !first {
+			w.WriteRune('\n')
+		}
+		first = false
+		w.WriteString(f.DebugString())
 	}
 
 	return w.String()
@@ -70,6 +86,18 @@ func (f Filter) String() string {
 	return w.String()
 }
 
+// DebugString returns text representation of the filter with extra debugging
+// information Gmail search representation and URL included.
+func (f Filter) DebugString() string {
+	w := writer{}
+
+	w.WriteString(fmt.Sprintf("# Search: %s\n", f.Criteria.ToGmailSearch()))
+	w.WriteString(fmt.Sprintf("# URL: %s\n", f.Criteria.ToGmailSearchURL()))
+	w.WriteString(f.String())
+
+	return w.String()
+}
+
 func indent(query string, level int) string {
 	var indented bytes.Buffer
 	if !indentInternal(strings.NewReader(query), &indented, level+1) {
@@ -78,6 +106,7 @@ func indent(query string, level int) string {
 	return "\n" + strings.TrimRight(indented.String(), "\n ")
 }
 
+//revive:disable:cyclomatic High complexity, needs some refactoring
 func indentInternal(queryReader io.RuneReader, out *bytes.Buffer, level int) bool {
 	type parseState int
 	const (
@@ -212,6 +241,13 @@ func (c Criteria) ToGmailSearch() string {
 	}
 
 	return strings.Join(res, " ")
+}
+
+// ToGmailSearchURL returns the equivalent query in an URL to Gmail search.
+func (c Criteria) ToGmailSearchURL() string {
+	return fmt.Sprintf(
+		"https://mail.google.com/mail/u/0/#search/%s",
+		url.QueryEscape(c.ToGmailSearch()))
 }
 
 type writer struct {

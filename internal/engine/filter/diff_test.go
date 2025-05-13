@@ -9,8 +9,10 @@ import (
 	"github.com/mbrt/gmailctl/internal/engine/gmail"
 )
 
+const contextLines = 5
+
 func TestNoDiff(t *testing.T) {
-	old := Filters{
+	prev := Filters{
 		{
 			ID: "abcdefg",
 			Criteria: Criteria{
@@ -21,7 +23,7 @@ func TestNoDiff(t *testing.T) {
 			},
 		},
 	}
-	new := Filters{
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From: "someone@gmail.com",
@@ -32,14 +34,14 @@ func TestNoDiff(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	assert.Nil(t, err)
 	// No difference even if the ID is present in only one of them.
 	assert.True(t, fd.Empty())
 }
 
 func TestDiffOutput(t *testing.T) {
-	old := Filters{
+	prev := Filters{
 		{
 			ID: "abcdefg",
 			Criteria: Criteria{
@@ -52,7 +54,7 @@ func TestDiffOutput(t *testing.T) {
 			},
 		},
 	}
-	new := Filters{
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From:  "{someone@gmail.com else@gmail.com}",
@@ -65,13 +67,122 @@ func TestDiffOutput(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	assert.Nil(t, err)
 
 	expected := `
 --- Current
 +++ TO BE APPLIED
 @@ -1,15 +1,15 @@
+ * Criteria:
+-    from: someone@gmail.com
++    from: {someone@gmail.com else@gmail.com}
+     query: 
+       (
+         a
+-        b
++        c
+       )
+       subject:(
+         foo
+-        bar
++        baz
+       )
+   Actions:
+     mark as read
+     categorize as: personal`
+	assert.Equal(t, strings.TrimSpace(fd.String()), strings.TrimSpace(expected))
+}
+
+func TestDiffOutputWithCustomContextLines(t *testing.T) {
+	prev := Filters{
+		{
+			ID: "abcdefg",
+			Criteria: Criteria{
+				From:  "someone@gmail.com",
+				Query: "(a b) subject:(foo bar)",
+			},
+			Action: Actions{
+				MarkRead: true,
+				Category: gmail.CategoryPersonal,
+			},
+		},
+	}
+	curr := Filters{
+		{
+			Criteria: Criteria{
+				From:  "{someone@gmail.com else@gmail.com}",
+				Query: "(a c) subject:(foo baz)",
+			},
+			Action: Actions{
+				MarkRead: true,
+				Category: gmail.CategoryPersonal,
+			},
+		},
+	}
+
+	fd, err := Diff(prev, curr, false, 1 /* contextLines */)
+	assert.Nil(t, err)
+
+	expected := `
+--- Current
++++ TO BE APPLIED
+@@ -1,3 +1,3 @@
+ * Criteria:
+-    from: someone@gmail.com
++    from: {someone@gmail.com else@gmail.com}
+     query: 
+@@ -5,3 +5,3 @@
+         a
+-        b
++        c
+       )
+@@ -9,3 +9,3 @@
+         foo
+-        bar
++        baz
+       )`
+	assert.Equal(t, strings.TrimSpace(fd.String()), strings.TrimSpace(expected))
+}
+
+func TestDiffOutputWithGmailSearchURL(t *testing.T) {
+	prev := Filters{
+		{
+			ID: "abcdefg",
+			Criteria: Criteria{
+				From:  "someone@gmail.com",
+				Query: "(a b) subject:(foo bar)",
+			},
+			Action: Actions{
+				MarkRead: true,
+				Category: gmail.CategoryPersonal,
+			},
+		},
+	}
+	curr := Filters{
+		{
+			Criteria: Criteria{
+				From:  "{someone@gmail.com else@gmail.com}",
+				Query: "(a c) subject:(foo baz)",
+			},
+			Action: Actions{
+				MarkRead: true,
+				Category: gmail.CategoryPersonal,
+			},
+		},
+	}
+
+	fd, err := Diff(prev, curr, true, contextLines)
+	assert.Nil(t, err)
+
+	expected := `
+--- Current
++++ TO BE APPLIED
+@@ -1,17 +1,17 @@
+-# Search: from:someone@gmail.com (a b) subject:(foo bar)
+-# URL: https://mail.google.com/mail/u/0/#search/from%3Asomeone%40gmail.com+%28a+b%29+subject%3A%28foo+bar%29
++# Search: from:{someone@gmail.com else@gmail.com} (a c) subject:(foo baz)
++# URL: https://mail.google.com/mail/u/0/#search/from%3A%7Bsomeone%40gmail.com+else%40gmail.com%7D+%28a+c%29+subject%3A%28foo+baz%29
  * Criteria:
 -    from: someone@gmail.com
 +    from: {someone@gmail.com else@gmail.com}
@@ -126,8 +237,8 @@ func someFilters() Filters {
 }
 
 func TestDiffAddRemove(t *testing.T) {
-	old := someFilters()
-	new := Filters{
+	prev := someFilters()
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From: "{someone@gmail.com else@gmail.com}",
@@ -155,18 +266,19 @@ func TestDiffAddRemove(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	expected := FiltersDiff{
-		Added:   Filters{new[0]},
-		Removed: Filters{old[1]},
+		Added:        Filters{curr[0]},
+		Removed:      Filters{prev[1]},
+		ContextLines: contextLines,
 	}
 	assert.Nil(t, err)
 	assert.Equal(t, expected, fd)
 }
 
 func TestDiffReorder(t *testing.T) {
-	old := someFilters()
-	new := Filters{
+	prev := someFilters()
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				To: "me@gmail.com",
@@ -194,15 +306,15 @@ func TestDiffReorder(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	assert.Nil(t, err)
 	assert.Len(t, fd.Added, 0)
 	assert.Len(t, fd.Removed, 0)
 }
 
 func TestDiffModify(t *testing.T) {
-	old := someFilters()
-	new := Filters{
+	prev := someFilters()
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From: "someone@gmail.com",
@@ -230,18 +342,19 @@ func TestDiffModify(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	expected := FiltersDiff{
-		Added:   Filters{new[1]},
-		Removed: Filters{old[1]},
+		Added:        Filters{curr[1]},
+		Removed:      Filters{prev[1]},
+		ContextLines: contextLines,
 	}
 	assert.Nil(t, err)
 	assert.Equal(t, expected, fd)
 }
 
 func TestDiffAdd(t *testing.T) {
-	old := someFilters()
-	new := Filters{
+	prev := someFilters()
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From: "someone@gmail.com",
@@ -278,17 +391,18 @@ func TestDiffAdd(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	expected := FiltersDiff{
-		Added: Filters{new[2]},
+		Added:        Filters{curr[2]},
+		ContextLines: contextLines,
 	}
 	assert.Nil(t, err)
 	assert.Equal(t, expected, fd)
 }
 
 func TestDiffRemove(t *testing.T) {
-	old := someFilters()
-	new := Filters{
+	prev := someFilters()
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				To: "me@gmail.com",
@@ -300,9 +414,10 @@ func TestDiffRemove(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	expected := FiltersDiff{
-		Removed: Filters{old[2], old[0]},
+		Removed:      Filters{prev[2], prev[0]},
+		ContextLines: contextLines,
 	}
 
 	assert.Nil(t, err)
@@ -310,8 +425,8 @@ func TestDiffRemove(t *testing.T) {
 }
 
 func TestDuplicate(t *testing.T) {
-	old := Filters{}
-	new := Filters{
+	prev := Filters{}
+	curr := Filters{
 		{
 			Criteria: Criteria{
 				From: "someone@gmail.com",
@@ -330,10 +445,10 @@ func TestDuplicate(t *testing.T) {
 		},
 	}
 
-	fd, err := Diff(old, new)
+	fd, err := Diff(prev, curr, false, contextLines)
 	assert.Nil(t, err)
 	// Only one of the two identical filters is present
-	assert.Equal(t, new[1:], fd.Added)
+	assert.Equal(t, curr[1:], fd.Added)
 }
 
 func TestIndent(t *testing.T) {

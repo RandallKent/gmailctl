@@ -29,6 +29,9 @@ label, archive and manage your inbox automatically.
     - [Automatic labels](#automatic-labels)
     - [Multiple Gmail accounts](#multiple-gmail-accounts)
   - [Known issues](#known-issues)
+    - [Apply filters to existing emails](#apply-filters-to-existing-emails)
+    - [OAuth2 authentication errors](#oauth2-authentication-errors)
+    - [YAML config is unsupported](#yaml-config-is-unsupported)
   - [Comparison with existing projects](#comparison-with-existing-projects)
   - [Footnotes](#footnotes)
 
@@ -64,9 +67,9 @@ This project then exists to provide to your Gmail filters:
 
 ## Install
 
-gmailctl is written in Go and requires at least Go version 1.17. Make sure to
-setup your [$GOPATH](https://golang.org/doc/code.html#GOPATH) correctly,
-including the `bin` subdirectory in your `$PATH`.
+gmailctl is written in Go and requires a recent version (see [go.mod](go.mod)).
+Make sure to setup your [`$GOPATH`](https://golang.org/doc/code.html#GOPATH)
+correctly and include its `bin` subdirectory in your `$PATH`.
 
 ```
 go install github.com/mbrt/gmailctl/cmd/gmailctl@latest
@@ -195,9 +198,9 @@ All the available commands (you can also check with `gmailctl help`):
 
 ## Configuration
 
-**NOTE:** The configuration format is still in alpha and might change in the
-future. If you are looking for the deprecated versions `v1alpha1`, or
-`v1alpha2`, please refer to [docs/v1alpha1.md](docs/v1alpha1.md) and
+**NOTE:** Despite the name, the configuration format is stable at `v1alpha3`.
+If you are looking for the deprecated versions `v1alpha1`, or `v1alpha2`,
+please refer to [docs/v1alpha1.md](docs/v1alpha1.md) and
 [docs/v1alpha2.md](docs/v1alpha2.md).
 
 The configuration file is written in Jsonnet, that is a very powerful
@@ -675,7 +678,7 @@ For example you want to:
 
 * mark the email as important if directed to you;
 * or if it's coming from a list of favourite addresses, label as interesting;
-* of if it's directed to a certain alias, archive it.
+* or if it's directed to a certain alias, archive it.
 
 Luckily you don't have to do that by hand, thanks to the utility library coming
 with `gmailctl`. There's a `chainFilters` function that does exactly that: takes

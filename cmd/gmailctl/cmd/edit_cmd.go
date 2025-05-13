@@ -17,8 +17,10 @@ import (
 
 // Parameters
 var (
-	editFilename  string
-	editSkipTests bool
+	editFilename    string
+	editSkipTests   bool
+	editDebug       bool
+	editDiffContext int
 )
 
 var (
@@ -51,7 +53,7 @@ environment variable.
 
 By default edit uses the configuration file inside the config
 directory [config.jsonnet].`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(*cobra.Command, []string) {
 		f := editFilename
 		if f == "" {
 			f = configFilenameFromDir(cfgDir)
@@ -68,9 +70,15 @@ func init() {
 	// Flags and configuration settings
 	editCmd.PersistentFlags().StringVarP(&editFilename, "filename", "f", "", "configuration file")
 	editCmd.Flags().BoolVarP(&editSkipTests, "yolo", "", false, "skip configuration tests")
+	editCmd.PersistentFlags().BoolVarP(&editDebug, "debug", "", false, "print extra debugging information")
+	editCmd.PersistentFlags().IntVarP(&editDiffContext, "diff-context", "", papply.DefaultContextLines, "number of lines of filter diff context to show")
 }
 
 func edit(path string, test bool) error {
+	if editDiffContext < 0 {
+		return errors.New("--diff-context must be non-negative")
+	}
+
 	// First make sure that Gmail can be contacted, so that we don't
 	// waste the user's time editing a config file that cannot be
 	// applied now.
@@ -131,8 +139,15 @@ func moveFile(from, to string) error {
 	}
 	_, err = f.Write(b)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
 	return os.Remove(from)
 }
 
@@ -142,8 +157,7 @@ func copyToTmp(path string) (string, error) {
 		return "", errors.WithCause(err, config.ErrNotFound)
 	}
 
-	// Use the same extension as the original file.
-	tmp, err := os.CreateTemp("", fmt.Sprintf("gmailctl-*%s", filepath.Ext(path)))
+	tmp, err := createTmp(path)
 	if err != nil {
 		return "", fmt.Errorf("creating tmp file: %w", err)
 	}
@@ -154,6 +168,25 @@ func copyToTmp(path string) (string, error) {
 
 	res := tmp.Name()
 	return res, tmp.Close()
+}
+
+func createTmp(originalPath string) (*os.File, error) {
+	// First try in the same directory as the original file. This is useful to
+	// allow IDEs to access libraries imported from the same directory.
+	preferredDir := filepath.Dir(originalPath)
+	// Use the same extension as the original file.
+	pattern := fmt.Sprintf("gmailctl-tmp-*%s", filepath.Ext(originalPath))
+	tmp, err := os.CreateTemp(preferredDir, pattern)
+	if err == nil {
+		return tmp, nil
+	}
+
+	// Fall back to the system temporary directory.
+	tmp, err = os.CreateTemp("", pattern)
+	if err != nil {
+		return nil, fmt.Errorf("creating tmp file: %w", err)
+	}
+	return tmp, err
 }
 
 func spawnEditor(path string) error {
@@ -196,7 +229,7 @@ func applyEdited(path, originalPath string, test bool, gmailapi *api.GmailAPI) e
 		return err
 	}
 
-	diff, err := papply.Diff(parseRes.Res.GmailConfig, upstream)
+	diff, err := papply.Diff(parseRes.Res.GmailConfig, upstream, editDebug, editDiffContext)
 	if err != nil {
 		return errors.New("comparing upstream with local config")
 	}

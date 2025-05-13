@@ -246,6 +246,10 @@ func quoteStrings(a ...string) []string {
 }
 
 func quote(a string) string {
+	// Skip quoting if already quoted.
+	if strings.HasPrefix(a, `"`) && strings.HasSuffix(a, `"`) {
+		return a
+	}
 	if strings.ContainsAny(a, " \t{}()") {
 		return fmt.Sprintf(`"%s"`, a)
 	}
@@ -423,7 +427,7 @@ func countNodes(tree parser.CriteriaAST) int {
 func splitRootOr(tree parser.CriteriaAST) []parser.CriteriaAST {
 	// Since Gmail filters are all applied when they match, we can reduce
 	// the size of a rule and make it more readable by splitting a single
-	// rule where wee have an OR as the top-level operation, with a set of
+	// rule where we have an OR as the top-level operation, with a set of
 	// rules, each a child of the original OR.
 	//
 	// Example: or(from:a to:b list:c) => archive
@@ -460,7 +464,7 @@ func generateActions(actions parser.Actions) ([]Actions, error) {
 	if len(actions.Labels) == 0 {
 		return res, nil
 	}
-	// Since every action can contain a single lable only, we might need to
+	// Since every action can contain a single label only, we might need to
 	// produce multiple actions.
 	//
 	// The first label can stay in the first action

@@ -20,7 +20,7 @@ const (
 
 To do so, head to https://console.developers.google.com
 
-1. Create a new project if you don't have one.
+0. Create a new project if you don't have one.
 1. Go to 'Enable API and services', search for Gmail and enable it.
 2. Go to 'OAuth consent screen'.
     2a. If your account is managed by an organization, you have to
@@ -29,10 +29,10 @@ To do so, head to https://console.developers.google.com
     2b. Set an application name (e.g. 'gmailctl').
     2c. Use your email for 'User support email' and 'Developer
         contact information'. Save and continue.
-    3c. Select 'Add or remove scopes' and add:
+    2d. Select 'Add or remove scopes' and add:
         * https://www.googleapis.com/auth/gmail.labels
         * https://www.googleapis.com/auth/gmail.settings.basic
-    3d. Save and continue until you're back to the dashboard.
+    2e. Save and continue until you're back to the dashboard.
 3. You now have a choice. You can either:
     * Click on 'Publish App' and avoid 'Submitting for
       verification'. This will result in scary confirmation
@@ -47,8 +47,9 @@ To do so, head to https://console.developers.google.com
     4b. Select 'OAuth client ID'.
     4c. Select 'Desktop app' as 'Application type' and give it a name.
     4d. Create.
-5. Download the credentials file into %q and execute the 'init'
-   command again.
+5. Download the credentials file into
+   %q
+   and execute the 'init' command again.
 
 Documentation about Gmail API authorization can be found
 at: https://developers.google.com/gmail/api/auth/about-auth
@@ -75,19 +76,19 @@ func (Provider) Service(ctx context.Context, cfgDir string) (*gmail.Service, err
 	return openToken(ctx, auth, tokenPath(cfgDir))
 }
 
-func (Provider) InitConfig(cfgDir string) error {
+func (Provider) InitConfig(cfgDir string, port int) error {
 	cpath := credentialsPath(cfgDir)
 	tpath := tokenPath(cfgDir)
 
 	auth, err := openCredentials(cpath)
 	if err != nil {
-		fmt.Printf(credentialsMissingMsg, cpath)
-		return err
+		return errors.WithDetails(err,
+			fmt.Sprintf(credentialsMissingMsg, cpath))
 	}
 	_, err = openToken(context.Background(), auth, tpath)
 	if err != nil {
 		stderrPrintf("%v\n\n", err)
-		err = setupToken(auth, tpath)
+		err = setupToken(auth, tpath, port)
 	}
 	return err
 }
@@ -102,7 +103,7 @@ func (Provider) ResetConfig(cfgDir string) error {
 	return nil
 }
 
-func (Provider) RefreshToken(ctx context.Context, cfgDir string) error {
+func (Provider) RefreshToken(ctx context.Context, cfgDir string, port int) error {
 	auth, err := openCredentials(credentialsPath(cfgDir))
 	if err != nil {
 		return errors.WithDetails(fmt.Errorf("invalid credentials: %w", err),
@@ -110,11 +111,11 @@ func (Provider) RefreshToken(ctx context.Context, cfgDir string) error {
 	}
 	svc, err := openToken(ctx, auth, tokenPath(cfgDir))
 	if err != nil {
-		return setupToken(auth, tokenPath(cfgDir))
+		return setupToken(auth, tokenPath(cfgDir), port)
 	}
 	// Check whether the token works by getting a label.
 	if _, err := svc.Users.Labels.Get("me", "INBOX").Context(ctx).Do(); err != nil {
-		return setupToken(auth, tokenPath(cfgDir))
+		return setupToken(auth, tokenPath(cfgDir), port)
 	}
 	return nil
 }
@@ -135,9 +136,9 @@ func openToken(ctx context.Context, auth *api.Authenticator, path string) (*gmai
 	return auth.Service(ctx, token)
 }
 
-func setupToken(auth *api.Authenticator, path string) error {
+func setupToken(auth *api.Authenticator, path string, port int) error {
 	localSrv := newOauth2Server(auth.State)
-	addr, err := localSrv.Start()
+	addr, err := localSrv.Start(port)
 	if err != nil {
 		return errors.WithDetails(fmt.Errorf("starting local server: %w", err),
 			"gmailctl requires a temporary local HTTP server for the authentication flow.")
