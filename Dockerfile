@@ -1,4 +1,6 @@
-FROM golang:1.20-alpine
+FROM golang:1.23-alpine
+
+RUN apk --no-cache apk update && apk --no-cache upgrade
 
 WORKDIR /usr/src/gmailctl
 
@@ -8,6 +10,9 @@ RUN go mod download && go mod verify
 
 COPY . .
 RUN go build -v -o /usr/local/bin ./...
+
+# Build the docker container:
+# docker build -t randallkent/gmailctl -t randallkent/gmailctl:latest .
 
 # Setup function in bash_profile to run this docker container and not keep the container after it exits 
 # Exposes port to complete auth to generate token.json

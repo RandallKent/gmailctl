@@ -138,7 +138,7 @@ func openToken(ctx context.Context, auth *api.Authenticator, path string) (*gmai
 
 func setupToken(auth *api.Authenticator, path string, port int) error {
 	localSrv := newOauth2Server(auth.State)
-	addr, err := localSrv.Start(port)
+	addr, err := localSrv.Start()
 	if err != nil {
 		return errors.WithDetails(fmt.Errorf("starting local server: %w", err),
 			"gmailctl requires a temporary local HTTP server for the authentication flow.")
